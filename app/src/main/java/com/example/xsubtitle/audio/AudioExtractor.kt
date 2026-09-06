@@ -7,7 +7,6 @@ import android.media.MediaFormat
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.FileDescriptor
 
 /**
  * 从视频 Uri 提取音轨，解码为 16bit PCM，重采样到 16kHz 单声道后分块回调。
@@ -27,8 +26,8 @@ class AudioExtractor(private val context: Context) {
                 extractor.release()
                 return@withContext
             }
-            pfd.use { fd: FileDescriptor ->
-                extractor.setDataSource(fd)
+            pfd.use {
+                extractor.setDataSource(it.fileDescriptor)
                 var audioTrack = -1
                 for (i in 0 until extractor.trackCount) {
                     val fmt = extractor.getTrackFormat(i)
