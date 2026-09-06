@@ -15,7 +15,7 @@ import java.io.FileDescriptor
  */
 class AudioExtractor(private val context: Context) {
 
-    interface PcmSink {
+    fun interface PcmSink {
         fun onPcm(pcm16Mono: ByteArray)
     }
 
