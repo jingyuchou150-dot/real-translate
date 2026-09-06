@@ -1,0 +1,48 @@
+name: Build 实时翻译 APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: '12266719'
+          packages: 'platforms;android-34 build-tools;34.0.0'
+
+      - name: Download and install Gradle 8.9
+        run: |
+          mkdir -p /opt/gradle
+          curl -fsSL -o /tmp/gradle-8.9-bin.zip https://services.gradle.org/distributions/gradle-8.9-bin.zip
+          unzip -q /tmp/gradle-8.9-bin.zip -d /opt/gradle
+          ln -sf /opt/gradle/gradle-8.9/bin/gradle /usr/local/bin/gradle
+          gradle --version
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build APK
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
+        run: gradle assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: 实时翻译
+          path: app/build/outputs/apk/debug/实时翻译.apk
+          if-no-files-found: error
