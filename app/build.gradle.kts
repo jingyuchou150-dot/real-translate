@@ -44,9 +44,9 @@ android {
     }
 
     // 产物文件名固定为「实时翻译.apk」
-    applicationVariants.all { variant ->
-        variant.outputs.all { output ->
-            output.outputFileName = "实时翻译.apk"
+    applicationVariants.all {
+        outputs.all {
+            (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName = "实时翻译.apk"
         }
     }
 }
