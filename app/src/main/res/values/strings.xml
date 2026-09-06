@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">实时翻译</string>
+    <string name="pick_video">选择视频</string>
+    <string name="pick_model">选择 Vosk 模型目录</string>
+    <string name="model_hint">日文视频 → 中文字幕\n语音识别在手机本地完成，无需联网</string>
+    <string name="start_recognize">生成字幕</string>
+    <string name="recognizing">正在识别音频并生成字幕…</string>
+    <string name="export_srt">导出 SRT</string>
+    <string name="translate_switch">翻译模式（日→中，需联网）</string>
+    <string name="translate_off">仅原文(离线)</string>
+    <string name="translate_on">在线翻译</string>
+    <string name="status_idle">就绪</string>
+    <string name="status_done">字幕已就绪</string>
+</resources>
