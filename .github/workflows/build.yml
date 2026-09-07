@@ -1,48 +1,81 @@
 name: Build 实时翻译 APK
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:   # 手动触发：Actions 标签页 -> Run workflow
   push:
-    branches: [main, master]
+    branches: [ main, master ]
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
+      - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          cmdline-tools-version: '12266719'
-          packages: 'platforms;android-34 build-tools;34.0.0'
 
-      - name: Download and install Gradle 8.9
+      - name: Install SDK packages (platform 34 + build-tools)
         run: |
-          mkdir -p /opt/gradle
-          curl -fsSL -o /tmp/gradle-8.9-bin.zip https://services.gradle.org/distributions/gradle-8.9-bin.zip
-          unzip -q /tmp/gradle-8.9-bin.zip -d /opt/gradle
-          ln -sf /opt/gradle/gradle-8.9/bin/gradle /usr/local/bin/gradle
-          gradle --version
+          sdkmanager --install "platforms;android-34" "build-tools;34.0.0"
+          yes | sdkmanager --licenses
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      # 直接下载 Gradle 8.9 发行版并加入 PATH，避免使用 gradle-wrapper.jar（仓库未内置）
+      - name: Install Gradle 8.9
+        run: |
+          curl -fsSL -o gradle.zip https://services.gradle.org/distributions/gradle-8.9-bin.zip
+          unzip -q gradle.zip
+          echo "$(pwd)/gradle-8.9/bin" >> "$GITHUB_PATH"
 
-      - name: Build APK
+      # 把 Vosk 日语模型（约 48MB）在云端下好并打进 APK 的 assets，
+      # 这样手机上第一次打开不需要联网下载模型。
+      - name: Bundle Vosk Japanese model into assets
+        run: |
+          mkdir -p app/src/main/assets
+          for i in 1 2 3; do
+            echo "download attempt $i"
+            if curl -fL --retry 3 --retry-delay 5 \
+                 -o app/src/main/assets/vosk-model-ja.zip \
+                 https://alphacephei.com/vosk/models/vosk-model-small-ja-0.22.zip; then
+              break
+            fi
+          done
+          ls -lh app/src/main/assets/
+          SZ=$(stat -c%s app/src/main/assets/vosk-model-ja.zip 2>/dev/null || echo 0)
+          echo "model zip size = $SZ bytes"
+          if [ "$SZ" -lt 40000000 ]; then
+            echo "模型下载不完整，构建中止"
+            exit 1
+          fi
+
+      - name: Build Debug APK
         env:
-          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
-        run: gradle assembleDebug
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
+        run: gradle assembleDebug --no-daemon
 
-      - name: Upload APK
+      - name: Upload APK (Artifact)
         uses: actions/upload-artifact@v4
         with:
-          name: 实时翻译
+          name: realtime-translate-apk
           path: app/build/outputs/apk/debug/实时翻译.apk
           if-no-files-found: error
+
+      # 同时发布到 Releases 页面，下载更稳定（不受浏览器下载拦截影响）
+      - name: Publish APK to Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: 实时翻译 v1.0.${{ github.run_number }}
+          body: 自动构建产物：日文 → 中文字幕（离线识别 + 在线翻译，模型已内置）
+          files: app/build/outputs/apk/debug/实时翻译.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
