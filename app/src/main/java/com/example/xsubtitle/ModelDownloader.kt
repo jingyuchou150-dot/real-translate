@@ -9,37 +9,79 @@ import java.io.File
 import java.util.zip.ZipInputStream
 
 /**
- * 首次使用时自动下载并解压离线识别模型（日语音频模型）。
- * 这样 APK 体积小、用户无需手动放置模型，实现“傻瓜式”开箱即用。
+ * 离线识别模型（日语）的就绪工具。
  *
- * 下载地址为官方 Vosk 模型（在真机正常网络下可用）；
- * 若需要，可把 MODEL_URL 换成你自己的镜像/自建地址。
+ * 优先级：
+ * 1) 已解压过 -> 直接返回；
+ * 2) APK 内置模型包（assets/vosk-model-ja.zip）— 纯离线解压，不消耗流量；
+ * 3) 内置包不存在时才回退到网络下载（旧版构建或未打包模型的情况）。
  */
 object ModelDownloader {
 
     private const val MODEL_URL =
         "https://alphacephei.com/vosk/models/vosk-model-small-ja-0.22.zip"
     private const val MODEL_DIR = "ja"
+    private const val ASSET_ZIP = "vosk-model-ja.zip"
 
-    /**
-     * 确保模型已就绪，返回 Vosk 可加载的目录路径。
-     * onProgress(percent, status) 用于更新进度 UI。
-     */
     suspend fun ensure(
         context: Context,
         onProgress: (percent: Int, status: String) -> Unit
-    ): String {
+    ): String = withContext(Dispatchers.IO) {
         val target = File(context.filesDir, "vosk_models/$MODEL_DIR")
         if (target.exists() && target.listFiles()?.isNotEmpty() == true) {
-            return target.absolutePath
+            return@withContext target.absolutePath
         }
+
+        val fromAssets =
+            runCatching { unpackFromAssets(context, target, onProgress) }.getOrDefault(false)
+        if (fromAssets) {
+            return@withContext target.absolutePath
+        }
+
         onProgress(0, "正在下载日语识别模型…")
         val zipFile = File(context.cacheDir, "ja_model.zip")
         download(MODEL_URL, zipFile, onProgress)
         onProgress(99, "正在解压模型…")
         unzip(zipFile, target)
         zipFile.delete()
-        return target.absolutePath
+        target.absolutePath
+    }
+
+    private fun unpackFromAssets(
+        context: Context,
+        target: File,
+        onProgress: (percent: Int, status: String) -> Unit
+    ): Boolean {
+        val input = try {
+            context.assets.open(ASSET_ZIP)
+        } catch (e: Exception) {
+            return false
+        }
+        target.deleteRecursively()
+        target.mkdirs()
+        var extracted = 0L
+        ZipInputStream(input).use { zis ->
+            var entry = zis.nextEntry
+            while (entry != null) {
+                val rel = entry.name.substringAfter('/')
+                if (rel.isNotEmpty()) {
+                    val outFile = File(target, rel)
+                    if (entry.isDirectory) {
+                        outFile.mkdirs()
+                    } else {
+                        outFile.parentFile?.mkdirs()
+                        outFile.outputStream().use { os -> zis.copyTo(os) }
+                        extracted += entry.size
+                        onProgress(
+                            (extracted / 500_000L).coerceAtMost(99L).toInt(),
+                            "正在解压内置日语模型…"
+                        )
+                    }
+                }
+                entry = zis.nextEntry
+            }
+        }
+        return target.listFiles()?.isNotEmpty() == true
     }
 
     private suspend fun download(
@@ -78,7 +120,6 @@ object ModelDownloader {
         ZipInputStream(zip.inputStream()).use { zis ->
             var entry = zis.nextEntry
             while (entry != null) {
-                // zip 顶层目录形如 vosk-model-small-ja-0.22/，去掉这一层
                 val rel = entry.name.substringAfter('/')
                 if (rel.isNotEmpty()) {
                     val outFile = File(target, rel)
