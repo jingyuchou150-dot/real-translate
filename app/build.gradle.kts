@@ -42,6 +42,10 @@ android {
     buildFeatures {
         viewBinding = true
     }
+    // 内置的 Vosk 日语模型包（assets/vosk-model-ja.zip，约 48MB）不再二次压缩
+    androidResources {
+        noCompress += "zip"
+    }
 
     // 产物文件名固定为「实时翻译.apk」
     applicationVariants.all {
